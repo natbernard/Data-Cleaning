@@ -18,7 +18,7 @@ main_file = os.path.abspath(
 
 
 default_args = {
-    "owner": "Kevin Nduati",
+    "owner": "Natasha Bernard",
     "depends_on_past": False,
     "email_on_retry": False,
     "email_on_failure": False,
