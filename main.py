@@ -51,8 +51,10 @@ class ProductsCleaner:
             option("temporaryGcsBucket", bucket). \
             save("{0}.{1}".format(dataset, table))
 
-    def handle(self, spark, source_path, products_path, bucket, dataset, table, structure):
-        self.df = spark.read.parquet(source_path)
+    def handle(self, spark, source_path, products_path, bucket, dataset, table, structure, table_id):
+        self.df = spark.read.format("bigquery")\
+                       .option("table", table_id)\
+                       .load()
 
         # self.df = spark.createDataFrame(rdd, schema=structure)
 
@@ -100,7 +102,7 @@ class ProductsCleaner:
 
         # Apply get_closest_match udf to product_manufacturer column
         self.df = self.df.withColumn('best_product_match_array', product_name_udf(col('product_name'))). \
-            withColumn('best_manufacturer_match_array', manufacturer_name_udf(col('manufacturer_name'))). \
+            withColumn('best_manufacturer_match_array', manufacturer_name_udf(col('product_manufacturer'))). \
             withColumn('best_product_match', col('best_product_match_array')['best_match']). \
             withColumn('best_manufacturer_match', col('best_manufacturer_match_array')['best_match']). \
             withColumn('product_match_score', col('best_product_match_array')['best_score']). \
@@ -112,20 +114,25 @@ class ProductsCleaner:
                                      dataset=dataset,
                                      table=table,
                                      bucket=bucket)
-
+        
 
 if __name__ == '__main__':
     tmp_bucket = 'iprocure-edw'
     dataset_name = 'iprocure-edw.iprocure_edw'
-    table_name = 'stockist_sales_transactions_subsequent_cleanup'
+    table_name = 'product_cleanup_1'
+    source_table_id = 'iprocure-edw.iProcureMain.product'
+    service_account = '/home/natasha/Documents/Iprocure/Sales-Data-Cleanup/bigquery_credentials/credentials.json'
+
 
     conf = SparkConf(). \
-        set("spark.jars", "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.12-0.30.0.jar"). \
+        set("spark.jars", "/home/natasha/envs/spark_env/gcs-connector-hadoop2-latest.jar," \
+                        "/home/natasha/envs/spark_env/spark-3.3-bigquery-0.32.2.jar,"). \
         set("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem"). \
         set("spark.hadoop.fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS"). \
         set("spark.sql.execution.arrow.pyspark.enabled", "true"). \
         set("spark.executor.memory", "8g"). \
-        set("spark.driver.memory", "8g")
+        set("spark.driver.memory", "8g"). \
+        set("spark.hadoop.google.cloud.auth.service.account.json.keyfile", service_account)
 
     context = SparkContext(conf=conf)
     instance = SparkSession(context)
@@ -190,5 +197,5 @@ if __name__ == '__main__':
     ])
 
     ProductsCleaner().handle(instance, source_data_path, prod_names_path,
-                             tmp_bucket, dataset_name, table_name, schema)
+                             tmp_bucket, dataset_name, table_name, schema, source_table_id)
     instance.stop()
